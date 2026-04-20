@@ -47,8 +47,11 @@ export function TechniqueLearnSheet({
   const [readContent, setReadContent] = useState<TechniqueContentPayload | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
   const [readLoading, setReadLoading] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [currentListenText, setCurrentListenText] = useState("");
+  const [seekPct, setSeekPct] = useState(0);
 
-  const { speak, stop, speaking } = useSpeech();
+  const { speak, pause, resume, stop, speaking, paused, playbackActive, progressPct } = useSpeech();
 
   const loadVideos = useCallback(async () => {
     if (!technique?.youtubeQueryTerms?.length) {
@@ -108,6 +111,8 @@ export function TechniqueLearnSheet({
     setVideoError(null);
     setReadContent(null);
     setReadError(null);
+    setCurrentListenText("");
+    setSeekPct(0);
     stop();
   }, [open, technique, stop]);
 
@@ -128,6 +133,20 @@ export function TechniqueLearnSheet({
   }, [open, stop]);
 
   useEffect(() => {
+    if (speaking || paused) {
+      setSeekPct(progressPct);
+    }
+  }, [speaking, paused, progressPct]);
+
+  useEffect(() => {
+    if (!currentListenText.trim()) return;
+    if (!playbackActive || paused) return;
+    // Apply speed changes immediately by restarting from current seek point.
+    speak(currentListenText, { rate: playbackRate, startPct: seekPct });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playbackRate]);
+
+  useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -141,6 +160,22 @@ export function TechniqueLearnSheet({
   }, [open, onClose]);
 
   if (!open || !technique) return null;
+
+  function estimateRemainingLabel(text: string, pct: number, rate: number): string {
+    if (!text.trim()) return "--:-- left";
+    const words = text.trim().split(/\s+/).length;
+    const wordsPerMinute = 160 * Math.max(0.75, rate);
+    const totalSeconds = (words / wordsPerMinute) * 60;
+    const remaining = Math.max(0, Math.round(totalSeconds * (1 - pct / 100)));
+    const min = Math.floor(remaining / 60);
+    const sec = String(remaining % 60).padStart(2, "0");
+    return `${min}:${sec} left`;
+  }
+
+  function startPlaybackFrom(pct: number) {
+    if (!currentListenText.trim()) return;
+    speak(currentListenText, { rate: playbackRate, startPct: pct });
+  }
 
   const tabs: { id: TabId; label: string }[] = [
     { id: "video", label: "Video" },
@@ -310,13 +345,108 @@ export function TechniqueLearnSheet({
                 Two listen modes: follow the reading aloud, or hear a short narrated summary. On-demand
                 only—nothing plays until you choose.
               </p>
+              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-white/70">
+                    Playback controls
+                  </p>
+                  <span className="text-xs text-white/50">
+                    {playbackRate.toFixed(2)}x ·{" "}
+                    {estimateRemainingLabel(currentListenText, seekPct, playbackRate)}
+                  </span>
+                </div>
+                <div className="mb-2">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={seekPct}
+                    onChange={(e) => setSeekPct(Number(e.target.value))}
+                    onPointerUp={(e) =>
+                      startPlaybackFrom(Number((e.currentTarget as HTMLInputElement).value))
+                    }
+                    className="w-full accent-[#2dd4bf]"
+                    aria-label="Playback position"
+                    disabled={!currentListenText.trim()}
+                  />
+                  <div className="mt-1 flex items-center justify-between text-[11px] text-white/45">
+                    <span>0%</span>
+                    <span>{Math.round(seekPct)}%</span>
+                    <span>100%</span>
+                  </div>
+                </div>
+                <input
+                  type="range"
+                  min={0.75}
+                  max={1.5}
+                  step={0.05}
+                  value={playbackRate}
+                  onChange={(e) => setPlaybackRate(Number(e.target.value))}
+                  className="w-full accent-[#2dd4bf]"
+                  aria-label="Playback speed"
+                />
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (playbackActive && !paused) pause();
+                    }}
+                    aria-disabled={!playbackActive || paused}
+                    className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                      playbackActive && !paused
+                        ? "border-white/25 text-white/85 hover:bg-white/10"
+                        : "border-white/10 text-white/40"
+                    }`}
+                  >
+                    Pause
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (playbackActive && paused) resume();
+                    }}
+                    aria-disabled={!playbackActive || !paused}
+                    className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                      playbackActive && paused
+                        ? "border-white/25 text-white/85 hover:bg-white/10"
+                        : "border-white/10 text-white/40"
+                    }`}
+                  >
+                    Resume
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (playbackActive) stop();
+                    }}
+                    aria-disabled={!playbackActive}
+                    className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                      playbackActive
+                        ? "border-white/25 text-white/85 hover:bg-white/10"
+                        : "border-white/10 text-white/40"
+                    }`}
+                  >
+                    Stop
+                  </button>
+                  {playbackActive ? (
+                    <span className="inline-flex items-center rounded-full border border-[#2dd4bf]/40 bg-[#2dd4bf]/10 px-2.5 py-1 text-[11px] text-[#99f6e4]">
+                      {paused ? "Paused" : "Playing"}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <button
                   type="button"
                   disabled={!readContent || readLoading}
                   onClick={() => {
                     const text = buildReadAloudText(readContent);
-                    if (text) speak(text);
+                    if (text) {
+                      setCurrentListenText(text);
+                      setSeekPct(0);
+                      speak(text, { rate: playbackRate, startPct: 0 });
+                    }
                   }}
                   className="flex-1 rounded-full border border-white/15 bg-white px-4 py-3 text-sm font-semibold text-[#0c0e12] transition hover:bg-white/95 disabled:cursor-not-allowed disabled:opacity-40"
                 >
@@ -326,7 +456,11 @@ export function TechniqueLearnSheet({
                   type="button"
                   disabled={!readContent?.narrationScript || readLoading}
                   onClick={() => {
-                    if (readContent?.narrationScript) speak(readContent.narrationScript);
+                    if (readContent?.narrationScript) {
+                      setCurrentListenText(readContent.narrationScript);
+                      setSeekPct(0);
+                      speak(readContent.narrationScript, { rate: playbackRate, startPct: 0 });
+                    }
                   }}
                   className="flex-1 rounded-full border border-white/15 bg-transparent px-4 py-3 text-sm font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
                 >
@@ -343,21 +477,6 @@ export function TechniqueLearnSheet({
                   Open the Read tab once to generate text, then return here to listen.
                 </p>
               )}
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={stop}
-                  disabled={!speaking}
-                  className="rounded-full border border-white/15 px-4 py-2 text-sm text-white/70 transition hover:bg-white/5 hover:text-white disabled:opacity-40"
-                >
-                  Stop
-                </button>
-                {speaking ? (
-                  <span className="text-xs font-medium text-[#99f6e4]" aria-live="polite">
-                    Playing…
-                  </span>
-                ) : null}
-              </div>
               <p className="text-xs text-white/45">
                 Uses your browser voice. For video audio, use the Video tab player.
               </p>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/mongodb";
 import type { SavedLearningPath } from "@/lib/types/learning";
+import { normalizeActivePathId, normalizeIncomingPaths } from "@/services/user-paths";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,21 +12,6 @@ interface UserPathStateDoc {
   paths: SavedLearningPath[];
   activePathId: string | null;
   updatedAt: Date;
-}
-
-function normalizeIncomingPaths(value: unknown): SavedLearningPath[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((x): x is SavedLearningPath => {
-    if (!x || typeof x !== "object") return false;
-    const p = x as Partial<SavedLearningPath>;
-    return (
-      typeof p.pathId === "string" &&
-      !!p.plan &&
-      typeof p.plan === "object" &&
-      !!p.progress &&
-      typeof p.progress === "object"
-    );
-  });
 }
 
 export async function GET() {
@@ -71,11 +57,7 @@ export async function PUT(req: Request) {
       activePathId?: unknown;
     };
     const paths = normalizeIncomingPaths(body.paths);
-    const activePathIdRaw = typeof body.activePathId === "string" ? body.activePathId : null;
-    const activePathId =
-      activePathIdRaw && paths.some((p) => p.pathId === activePathIdRaw)
-        ? activePathIdRaw
-        : paths[0]?.pathId ?? null;
+    const activePathId = normalizeActivePathId(paths, body.activePathId);
 
     await db.collection<UserPathStateDoc>("user_path_states").updateOne(
       { userId: session.id },

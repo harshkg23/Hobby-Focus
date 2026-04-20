@@ -2,17 +2,26 @@
 
 import type { LearningPlan, ProgressMap } from "@/lib/types/learning";
 import { computePlanProgressPercent, countCompleted } from "@/utils/progress";
+import { currentStreakDays, weeklyConsistency } from "@/utils/consistency";
+
+type SaveState = "idle" | "saving" | "saved" | "error";
 
 export function ProgressHeader({
   plan,
   progress,
+  saveState = "idle",
+  onRetrySave,
 }: {
   plan: LearningPlan;
   progress: ProgressMap;
+  saveState?: SaveState;
+  onRetrySave?: () => void;
 }) {
   const pct = computePlanProgressPercent(plan, progress);
   const done = countCompleted(progress);
   const total = plan.techniques.length;
+  const consistency = weeklyConsistency(progress);
+  const streak = currentStreakDays(progress);
 
   return (
     <div className="w-full rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.09] to-white/[0.02] p-5 shadow-xl backdrop-blur-xl sm:p-6">
@@ -52,6 +61,35 @@ export function ProgressHeader({
       <p className="mt-4 border-t border-white/10 pt-4 text-sm leading-relaxed text-white/65">
         {plan.focusLine}
       </p>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-white/75">
+            Consistency: {consistency}/7 days
+          </span>
+          <span className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-white/75">
+            Streak: {streak} day{streak === 1 ? "" : "s"}
+          </span>
+        </div>
+        <div className="text-xs text-white/65" aria-live="polite">
+          {saveState === "saving" ? "Saving progress..." : null}
+          {saveState === "saved" ? "Saved" : null}
+          {saveState === "idle" ? null : null}
+          {saveState === "error" ? (
+            <span className="inline-flex items-center gap-2">
+              Save failed
+              {onRetrySave ? (
+                <button
+                  type="button"
+                  onClick={onRetrySave}
+                  className="rounded-full border border-white/25 px-2 py-0.5 text-white/80 hover:bg-white/10"
+                >
+                  Retry
+                </button>
+              ) : null}
+            </span>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }

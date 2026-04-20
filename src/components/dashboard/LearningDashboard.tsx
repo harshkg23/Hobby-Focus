@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PlanForm } from "@/components/PlanForm";
 import { PathsSidebar } from "@/components/dashboard/PathsSidebar";
 import { ProgressHeader } from "@/components/ProgressHeader";
@@ -35,6 +35,9 @@ export function LearningDashboard() {
   const [userId, setUserId] = useState<string | null>(null);
   const [serverSyncReady, setServerSyncReady] = useState(false);
   const [showNewPathForm, setShowNewPathForm] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const lastSavedSignature = useRef<string>("");
 
   useEffect(() => {
     let cancelled = false;
@@ -68,20 +71,49 @@ export function LearningDashboard() {
     };
   }, [syncForUser, hydrateFromServer]);
 
+  const pushUserPathsToServer = useCallback(
+    async (
+      payload: {
+        paths: typeof paths;
+        activePathId: string | null;
+      },
+      signature: string
+    ) => {
+      setSaveState("saving");
+      setSaveError(null);
+      try {
+        const res = await fetch("/api/user-paths", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const data = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(data.error ?? "Failed to sync your data.");
+        }
+        lastSavedSignature.current = signature;
+        setSaveState("saved");
+        window.setTimeout(() => setSaveState((s) => (s === "saved" ? "idle" : s)), 1500);
+      } catch (e) {
+        setSaveState("error");
+        setSaveError(e instanceof Error ? e.message : "Failed to sync your data.");
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     if (!authReady || !serverSyncReady || !userId) return;
+    const signature = JSON.stringify({
+      activePathId,
+      paths,
+    });
+    if (signature === lastSavedSignature.current) return;
     const timeout = window.setTimeout(() => {
-      void fetch("/api/user-paths", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          paths,
-          activePathId,
-        }),
-      });
+      void pushUserPathsToServer({ paths, activePathId }, signature);
     }, 500);
     return () => window.clearTimeout(timeout);
-  }, [authReady, serverSyncReady, userId, paths, activePathId]);
+  }, [authReady, serverSyncReady, userId, paths, activePathId, pushUserPathsToServer]);
 
   useEffect(() => {
     if (paths.length > 0 && !activePathId) {
@@ -126,12 +158,31 @@ export function LearningDashboard() {
 
   if (!authReady) {
     return (
-      <div className="flex min-h-[60vh] w-full flex-col items-center justify-center gap-4">
-        <div
-          className="h-10 w-10 animate-spin rounded-full border-2 border-[#2dd4bf] border-t-transparent"
-          aria-hidden
+      <div className="flex w-full flex-col gap-10 lg:flex-row lg:items-start lg:gap-10">
+        <PathsSidebar
+          paths={[]}
+          activePathId={null}
+          loading
+          onSelect={() => undefined}
+          onAddPath={() => undefined}
+          onRemovePath={() => undefined}
         />
-        <p className="text-sm text-white/55">Preparing your workspace…</p>
+        <div className="min-w-0 flex-1 space-y-6">
+          <div className="h-8 w-48 animate-pulse rounded bg-white/10" />
+          <div className="h-4 w-80 animate-pulse rounded bg-white/10" />
+          <div className="grid gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={`loading-tech-${i}`}
+                className="rounded-2xl border border-white/10 bg-white/[0.05] p-5"
+              >
+                <div className="mb-3 h-5 w-56 animate-pulse rounded bg-white/10" />
+                <div className="mb-2 h-4 w-40 animate-pulse rounded bg-white/10" />
+                <div className="h-4 w-full animate-pulse rounded bg-white/10" />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -144,6 +195,7 @@ export function LearningDashboard() {
       <PathsSidebar
         paths={paths}
         activePathId={activePathId}
+        loading={!serverSyncReady}
         onSelect={(id) => {
           setActivePath(id);
           setSheetTechnique(null);
@@ -214,21 +266,47 @@ export function LearningDashboard() {
 
         {plan && (
           <>
-            <ProgressHeader plan={plan} progress={progress} />
+            <ProgressHeader
+              plan={plan}
+              progress={progress}
+              saveState={saveState}
+              onRetrySave={() => {
+                const signature = JSON.stringify({ activePathId, paths });
+                void pushUserPathsToServer({ paths, activePathId }, signature);
+              }}
+            />
+            {saveState === "error" && saveError ? (
+              <div className="rounded-xl border border-red-400/35 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                {saveError}
+              </div>
+            ) : null}
             <section aria-label="Techniques" className="w-full space-y-6">
               <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
                 <h2 className="font-display text-2xl font-semibold text-white">Your techniques</h2>
               </div>
               <div className="grid w-full gap-4">
-                {sortedTechniques.map((t) => (
-                  <TechniqueCard
-                    key={t.id}
-                    technique={t}
-                    status={statusFor(t.id)}
-                    onOpen={() => setSheetTechnique(t)}
-                    onSetStatus={(s) => setTechniqueStatus(t.id, s)}
-                  />
-                ))}
+                {!serverSyncReady ? (
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <div
+                      key={`sk-${i}`}
+                      className="rounded-2xl border border-white/10 bg-white/[0.05] p-5"
+                    >
+                      <div className="mb-3 h-5 w-56 animate-pulse rounded bg-white/10" />
+                      <div className="mb-2 h-4 w-40 animate-pulse rounded bg-white/10" />
+                      <div className="h-4 w-full animate-pulse rounded bg-white/10" />
+                    </div>
+                  ))
+                ) : (
+                  sortedTechniques.map((t) => (
+                    <TechniqueCard
+                      key={t.id}
+                      technique={t}
+                      status={statusFor(t.id)}
+                      onOpen={() => setSheetTechnique(t)}
+                      onSetStatus={(s) => setTechniqueStatus(t.id, s)}
+                    />
+                  ))
+                )}
               </div>
             </section>
           </>

@@ -50,7 +50,7 @@ It also includes authentication, protected dashboard access, and support for **m
 ### 5) Progress Tracking
 - Technique status options: `active`, `complete`, `skipped`, `revisit`.
 - Overall progress percentage shown per path.
-- Progress persists locally and is restored after refresh.
+- Progress persists locally and is synced to MongoDB per user session.
 
 ### 6) Caching
 - Optional MongoDB-backed cache for:
@@ -233,6 +233,13 @@ Open:
 - `GET /api/youtube/search?q=...`
   - Output: small list of curated YouTube videos
 
+- `GET /api/user-paths`
+  - Output: persisted user paths and active path
+
+- `PUT /api/user-paths`
+  - Input: `paths`, `activePathId`
+  - Output: saves current user path state
+
 ---
 
 ## Data Model Notes
@@ -253,6 +260,12 @@ Open:
 - each path contains:
   - `plan`
   - `progress` map keyed by `techniqueId`
+
+### User Path State (`user_path_states` collection)
+- `userId`
+- `paths[]`
+- `activePathId`
+- `updatedAt`
 
 ---
 
@@ -298,6 +311,8 @@ This avoids frequent `404 model not found` issues across API versions/projects.
 
 Current tests include:
 - progress utility behavior
+- weekly consistency and streak logic
+- user-path payload normalization and active-path fallback
 - learning plan shape contract
 
 Run:
@@ -331,7 +346,6 @@ npm run test
 
 ## Roadmap Ideas
 
-- Server-side persistence of path progress (cross-device sync).
 - Better analytics (streaks, consistency insights).
 - Optional reminders/calendar nudges.
 - Better content quality scoring for YouTube curation.

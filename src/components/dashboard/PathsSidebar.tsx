@@ -6,12 +6,14 @@ import { computePlanProgressPercent } from "@/utils/progress";
 export function PathsSidebar({
   paths,
   activePathId,
+  loading = false,
   onSelect,
   onAddPath,
   onRemovePath,
 }: {
   paths: SavedLearningPath[];
   activePathId: string | null;
+  loading?: boolean;
   onSelect: (pathId: string) => void;
   onAddPath: () => void;
   onRemovePath: (pathId: string) => void;
@@ -34,7 +36,16 @@ export function PathsSidebar({
           + Add learning path
         </button>
 
-        {paths.length === 0 ? (
+        {loading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="mb-2 h-4 w-24 animate-pulse rounded bg-white/10" />
+                <div className="h-3 w-16 animate-pulse rounded bg-white/10" />
+              </div>
+            ))}
+          </div>
+        ) : paths.length === 0 ? (
           <p className="rounded-xl border border-dashed border-white/15 bg-black/20 px-3 py-6 text-center text-sm text-white/45">
             No paths yet. Create one below to get started.
           </p>
