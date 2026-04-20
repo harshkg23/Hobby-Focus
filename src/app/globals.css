@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --surface: 252 250 247;
+  --surface-muted: 245 242 237;
+  --ink: 28 32 38;
+  --ink-muted: 92 99 112;
+  --accent: 45 212 191;
+  --accent-soft: 204 251 241;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: 22 24 28;
+    --surface-muted: 32 35 42;
+    --ink: 244 246 249;
+    --ink-muted: 168 176 188;
+    --accent: 94 234 212;
+    --accent-soft: 19 78 74;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply min-h-screen bg-surface text-ink antialiased;
+  background-image: radial-gradient(
+    ellipse 120% 80% at 50% -20%,
+    rgb(var(--accent-soft) / 0.35),
+    transparent 55%
+  );
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
