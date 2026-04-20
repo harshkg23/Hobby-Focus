@@ -4,6 +4,7 @@ import type { UserDoc } from "@/lib/types/user";
 import { hashPassword } from "@/lib/auth/password";
 
 const COL = "users";
+type NewUserDoc = Omit<UserDoc, "_id">;
 
 export async function findUserByEmail(email: string): Promise<UserDoc | null> {
   const db = await getDb();
@@ -28,12 +29,12 @@ export async function createUser(params: {
   }
   const passwordHash = await hashPassword(params.password);
   const now = new Date();
-  const insert = await db.collection<UserDoc>(COL).insertOne({
+  const insert = await db.collection<NewUserDoc>(COL).insertOne({
     email,
     name: params.name.trim().slice(0, 80),
     passwordHash,
     createdAt: now,
-  } as Omit<UserDoc, "_id">);
+  });
   const created = await db.collection<UserDoc>(COL).findOne({ _id: insert.insertedId });
   if (!created) throw new Error("Failed to create user.");
   return created;
